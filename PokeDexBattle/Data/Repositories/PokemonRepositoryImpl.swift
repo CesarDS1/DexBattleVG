@@ -110,10 +110,12 @@ final class PokemonRepositoryImpl: PokemonRepository {
             )
         }
 
-        // 2. Network fetch — detail + species run concurrently
-        async let detailFetch = apiClient.fetchPokemonDetail(id: id)
-        async let speciesFetch = apiClient.fetchSpecies(id: id)
-        let (dto, species) = try await (detailFetch, speciesFetch)
+        // 2. Network fetch — detail first, then species using the species ID from the detail
+        // response. This handles alternate forms (Mega, Alolan, Gigantamax, etc.) whose own
+        // ID differs from their base species ID (e.g. Mega Charizard X id=10034, species id=6).
+        // Fetching /pokemon-species/10034 would return 404; we must use dto.species.id (=6).
+        let dto = try await apiClient.fetchPokemonDetail(id: id)
+        let species = try await apiClient.fetchSpecies(id: dto.species.id)
 
         // Extract both English and Spanish flavor-text entries from the species response.
         // We cache both so switching the device language never shows a stale translation.
@@ -420,13 +422,27 @@ final class PokemonRepositoryImpl: PokemonRepository {
             for (moveID, info) in levelUpMoves {
                 group.addTask {
                     let dto = try await self.apiClient.fetchMoveDetail(id: moveID)
+                    // effect_entries only has en and fr — use it for the English short effect.
                     let effectEn = dto.effectEntries
                         .first(where: { $0.language.name == "en" })?
                         .shortEffect ?? ""
-                    let effectEs = dto.effectEntries
-                        .first(where: { $0.language.name == "es" })?
-                        .shortEffect ?? ""
-                    let effects = MoveEffects(en: effectEn, es: effectEs)
+                    // flavor_text_entries has full language coverage including Spanish.
+                    // Use the last (most recent game version) entry per language.
+                    let flavorEs = dto.flavorTextEntries
+                        .last(where: { $0.language.name == "es" })?
+                        .flavorText ?? ""
+                    let flavorEn = dto.flavorTextEntries
+                        .last(where: { $0.language.name == "en" })?
+                        .flavorText ?? ""
+                    // Spanish: prefer flavor text in es; fallback to flavor text in en; then effect in en.
+                    let effectEs = !flavorEs.isEmpty ? flavorEs
+                                 : !flavorEn.isEmpty ? flavorEn
+                                 : effectEn
+                    // English: prefer the short effect (more technical); fallback to flavor text.
+                    let finalEn = !effectEn.isEmpty ? effectEn
+                                : !flavorEn.isEmpty ? flavorEn
+                                : ""
+                    let effects = MoveEffects(en: finalEn, es: effectEs)
                     let move = PokemonMove(
                         id: dto.id,
                         name: info.name,
@@ -459,8 +475,11 @@ final class PokemonRepositoryImpl: PokemonRepository {
     ///
     /// Fetches the evolution chain for a Pokémon and maps it to a recursive `EvolutionStage` tree.
     private func fetchEvolutionChainFromNetwork(for pokemonID: Int) async throws -> EvolutionStage {
-        // species → chain
-        let species  = try await apiClient.fetchSpecies(id: pokemonID)
+        // Fetch the pokemon detail first to resolve the correct species ID.
+        // Alternate forms (Mega, Alolan, etc.) share their base species — using the form's
+        // own pokemonID against /pokemon-species/ would return 404.
+        let pokemonDetail = try await apiClient.fetchPokemonDetail(id: pokemonID)
+        let species  = try await apiClient.fetchSpecies(id: pokemonDetail.species.id)
         let chainDTO = try await apiClient.fetchEvolutionChain(id: species.evolutionChain.id)
 
         // Pre-fetch all species IDs concurrently so we have sprites for every stage
@@ -501,7 +520,12 @@ final class PokemonRepositoryImpl: PokemonRepository {
 
     /// Pure network implementation of `fetchForms(for:)`.
     private func fetchFormsFromNetwork(for pokemonID: Int) async throws -> [PokemonForm] {
-        let species = try await apiClient.fetchSpecies(id: pokemonID)
+        // Fetch the pokemon detail first to get the correct species ID.
+        // Alternate forms (Mega, Alolan, etc.) have their own pokemon ID but share the
+        // base species ID (e.g. Mega Charizard X: pokemonID=10034, speciesID=6).
+        // /pokemon-species/10034 returns 404 — we must use the species ID from the detail.
+        let pokemonDetail = try await apiClient.fetchPokemonDetail(id: pokemonID)
+        let species = try await apiClient.fetchSpecies(id: pokemonDetail.species.id)
 
         let forms: [PokemonForm] = try await withThrowingTaskGroup(of: PokemonForm.self) { group in
             for variety in species.varieties {

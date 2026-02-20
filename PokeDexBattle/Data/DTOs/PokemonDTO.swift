@@ -59,6 +59,10 @@ struct PokemonDetailDTO: Decodable {
     let stats: [StatSlotDTO]
     /// All moves this Pokémon can learn, across every game version and learn method.
     let moves: [MoveSlotDTO]
+    /// Reference to the species resource — use this to get the correct species ID
+    /// for alternate forms (Mega, Alolan, Gigantamax, etc.) whose own ID differs
+    /// from their base species ID (e.g. Mega Charizard X has id=10034 but species id=6).
+    let species: NamedResourceDTO
 
     // MARK: Move slots
 
@@ -171,13 +175,17 @@ struct MoveDetailDTO: Decodable {
     let damageClass: DamageClassDTO
     /// Elemental type of the move.
     let type: TypeInfoDTO
-    /// Localised effect descriptions (one per language).
+    /// Localised effect descriptions (one per language — only en and fr have entries).
     let effectEntries: [EffectEntryDTO]
+    /// Per-version, per-language flavor text descriptions (en, es, fr, de, it, etc.).
+    /// Used to provide Spanish move descriptions since `effect_entries` only has en/fr.
+    let flavorTextEntries: [MoveFlavorTextEntryDTO]
 
     enum CodingKeys: String, CodingKey {
         case id, name, power, accuracy, pp, type
-        case damageClass   = "damage_class"
-        case effectEntries = "effect_entries"
+        case damageClass      = "damage_class"
+        case effectEntries    = "effect_entries"
+        case flavorTextEntries = "flavor_text_entries"
     }
 
     /// Damage category descriptor.
@@ -208,6 +216,20 @@ struct MoveDetailDTO: Decodable {
     struct LanguageDTO: Decodable {
         /// ISO 639-1 language code (e.g. "en", "fr").
         let name: String
+    }
+
+    /// One flavor-text entry for a specific game version and language.
+    /// The `flavor_text_entries` array has broader language coverage than `effect_entries`
+    /// (includes es, de, it, ko, etc.) — used as the localized description source.
+    struct MoveFlavorTextEntryDTO: Decodable {
+        /// The raw flavor text for this move in the given language and version.
+        let flavorText: String
+        /// Language this entry is written in.
+        let language: LanguageDTO
+        enum CodingKeys: String, CodingKey {
+            case flavorText = "flavor_text"
+            case language
+        }
     }
 }
 
