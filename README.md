@@ -7,27 +7,48 @@ Fully localized in **English and Spanish** — UI strings, Pokédex descriptions
 
 ## Features
 
+### Pokédex
 - **Full Pokédex** — loads all 1 025 base-species Pokémon (IDs 1–1025) concurrently in a single fetch session
 - **Live search** — instantly filters the entire list by name as you type
 - **Type filter** — filter the list by one or more elemental types simultaneously
 - **Generation groups** — list is sectioned by generation (I–IX) with collapsible headers
 - **Pull-to-refresh** — clears the SwiftData cache and re-fetches everything from the network
-- **Detail screen** — high-resolution official artwork (475×475+), type badges, Pokédex entry description, colour-coded base stat bars, and a defensive type-matchup chart
+- **Favorites** — heart button on any row (swipe left) or on the detail screen; filter the list to show favorites only; persisted locally with SwiftData
+
+### Detail screen
+- **High-resolution artwork** — official artwork (475×475+) loaded from the PokeAPI sprites CDN
+- **Pokémon cry** — play the Pokémon's audio cry with an animated speaker button
+- **Segmented tabs** — About / Stats / Matchup, following Apple HIG recommendations
+- **About tab** — measurements (height / weight), gender ratio bar, Pokédex flavor-text entry (long-press to copy)
+- **Gender ratio** — split color bar showing male/female percentage; "Genderless" label for applicable Pokémon
+- **Stats tab** — spring-animated base stat bars (5 color tiers: red → teal); respects "Reduce Motion" preference
+- **Matchup tab** — defensive type-effectiveness chart computed in-memory from a built-in type chart; no API call needed
+
+### Sub-screens
 - **Moves by level** — full list of level-up moves with power, accuracy, PP, damage class, type badge, and a localized short effect description
 - **Evolutions** — full evolution chain rendered as a branching tree; tap any stage to navigate directly to that Pokémon's detail screen
 - **Forms & Variants** — alternate forms and regional variants (Mega, Alolan, Gigantamax, etc.); tap any form to navigate to its detail screen
-- **Type matchup chart** — defensive effectiveness (weak / resistant / immune) computed in-memory from a built-in type chart, no API call needed
-- **SwiftData cache** — cache-first strategy across all 5 data types; subsequent launches are instant
-- **Localization** — English and Spanish throughout: UI strings via `Localizable.xcstrings`, PokeAPI text (descriptions, move effects) cached per language and served by device locale, evolution trigger strings via `String(localized:)`
-- **Network logging** — every HTTP request and response is printed to the Xcode console with timestamp, status code, payload size, and duration
+
+### Team Builder
+- **Create teams** — name and save custom Pokémon teams of up to 6 members
+- **Add members** — add any Pokémon to a team from its detail screen; tap "Add to Team"
+- **Manage teams** — inline rename, swipe to remove individual members, delete entire teams
+- **Sprite strip** — team detail header shows mini-sprites for all current members
+- **Offline-ready** — member snapshots (name, sprite, types) are stored locally in SwiftData
+
+### General
+- **SwiftData cache** — cache-first strategy; subsequent launches are instant without any network calls
+- **Localization** — English and Spanish throughout
+- **Appearance** — system / light / dark mode toggle via toolbar menu
+- **Network logging** — every HTTP request and response printed to the Xcode console with timestamp, status, size, and duration
 
 ---
 
 ## Screenshots
 
-| Pokédex List | Detail — About | Moves by Level | Evolutions |
+| Pokédex List | Detail — About | Stats | Team Builder |
 |---|---|---|---|
-| Searchable, filterable list grouped by generation | Artwork, types, Pokédex entry, stat bars, matchup | Level-up moves with localized effect descriptions | Branching evolution chain, tap to navigate |
+| Searchable, type-filterable list grouped by generation with favorites filter | Artwork, cry button, gender bar, Pokédex entry | Animated stat bars with 5 color tiers | Team list + member grid with sprite strip |
 
 ---
 
@@ -36,36 +57,46 @@ Fully localized in **English and Spanish** — UI strings, Pokédex descriptions
 The app follows **Clean Architecture** with **MVVM** in the Presentation layer.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Presentation                     │
-│  PokemonListView / ViewModel                        │
-│  PokemonDetailView / ViewModel                      │
-│  MovesView / MovesViewModel                         │
-│  EvolutionsView / EvolutionsViewModel               │
-│  FormsView / FormsViewModel                         │
-│  TypeMatchupView / TypeChart                        │
-│  Shared / LocalizationHelper                        │
-└──────────────────────┬──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        Presentation                          │
+│  PokemonListView / ViewModel    (Pokédex list + favorites)   │
+│  PokemonDetailView / ViewModel  (detail + isFavorite)        │
+│  MovesView / MovesViewModel                                  │
+│  EvolutionsView / EvolutionsViewModel                        │
+│  FormsView / FormsViewModel                                  │
+│  TypeMatchupView / TypeChart                                 │
+│  TeamListView / ViewModel                                    │
+│  TeamDetailView / ViewModel                                  │
+│  SelectTeamSheet / AddToTeamView / AddToTeamViewModel        │
+│  Shared / LocalizationHelper                                 │
+└──────────────────────┬───────────────────────────────────────┘
                        │ depends on
-┌──────────────────────▼──────────────────────────────┐
-│                      Domain                         │
-│  Pokemon, PokemonDetail, PokemonMove,               │
-│  EvolutionStage, PokemonForm  (value types)         │
-│  PokemonRepository  (protocol)                      │
-└──────────────────────▲──────────────────────────────┘
+┌──────────────────────▼───────────────────────────────────────┐
+│                         Domain                               │
+│  Pokemon, PokemonDetail, PokemonMove,                        │
+│  EvolutionStage, PokemonForm  (value types)                  │
+│  PokemonTeam, TeamMember  (value types)                      │
+│  PokemonRepository  (protocol)                               │
+│  FavoritesRepository  (protocol)                             │
+│  TeamRepository  (protocol)                                  │
+└──────────────────────▲───────────────────────────────────────┘
                        │ implements
-┌──────────────────────┴──────────────────────────────┐
-│                       Data                          │
-│  PokemonRepositoryImpl  (cache-first)               │
-│  PokeAPIClient  (URLSession)                        │
-│  NetworkLogger                                      │
-│  PokemonDTO / MoveDetailDTO / PokemonSpeciesDTO /   │
-│  EvolutionChainDTO                                  │
-│  CachedPokemon / CachedPokemonDetail /              │
-│  CachedPokemonMove / CachedEvolutionNode /          │
-│  CachedPokemonForm  (SwiftData models)              │
-│  AppContainer  (singleton ModelContainer)           │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────┴───────────────────────────────────────┐
+│                          Data                                │
+│  PokemonRepositoryImpl  (cache-first)                        │
+│  FavoritesRepositoryImpl  (SwiftData CRUD)                   │
+│  TeamRepositoryImpl  (SwiftData CRUD)                        │
+│  PokeAPIClient  (URLSession)                                 │
+│  NetworkLogger                                               │
+│  PokemonDTO / MoveDetailDTO / PokemonSpeciesDTO /            │
+│  EvolutionChainDTO                                           │
+│  CachedPokemon / CachedPokemonDetail /                       │
+│  CachedPokemonMove / CachedEvolutionNode /                   │
+│  CachedPokemonForm  (Pokédex SwiftData models)               │
+│  CachedFavoritePokemon  (favorites SwiftData model)          │
+│  CachedTeam / CachedTeamMember  (team SwiftData models)      │
+│  AppContainer  (singleton ModelContainer — 8 models)         │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **Dependency rule:** arrows point inward only. The Domain layer has no external dependencies.
@@ -77,9 +108,9 @@ The app follows **Clean Architecture** with **MVVM** in the Presentation layer.
 | Technology | Usage |
 |---|---|
 | SwiftUI | All UI — declarative, no UIKit |
-| Swift Concurrency (`async/await`, `withThrowingTaskGroup`) | All network calls; parallel fetching of moves, evolution stages, and forms |
+| Swift Concurrency (`async/await`, `withThrowingTaskGroup`, `async let`) | All network calls; parallel fetching of moves, evolutions, forms, and isFavorite |
 | `@Observable` (Swift Observation) | ViewModels — replaces `ObservableObject`/`@Published` |
-| SwiftData | On-device cache — 5 model types, cache-first pattern |
+| SwiftData | On-device persistence — 8 model types: 5 Pokédex cache + 1 favorites + 2 team builder |
 | URLSession | HTTP client |
 | PokeAPI v2 | Data source (`https://pokeapi.co/api/v2`) |
 | `Localizable.xcstrings` | Modern Xcode 15+ string catalog with `en` + `es` translations |
@@ -99,8 +130,8 @@ The app follows **Clean Architecture** with **MVVM** in the Presentation layer.
 
 1. Clone the repository:
    ```bash
-   git clone <repo-url>
-   cd PokeDexBattle
+   git clone git@github.com:CesarDS1/DexBattleVG.git
+   cd DexBattleVG
    ```
 
 2. Open the project in Xcode:
@@ -128,10 +159,13 @@ xcodebuild \
 PokeDexBattle/
 ├── Domain/
 │   ├── Entities/
-│   │   └── Pokemon.swift              # Pokemon, PokemonDetail, PokemonMove,
-│   │                                  # EvolutionStage, PokemonForm
+│   │   ├── Pokemon.swift              # Pokemon, PokemonDetail, PokemonMove,
+│   │   │                              # EvolutionStage, PokemonForm
+│   │   └── PokemonTeam.swift          # PokemonTeam, TeamMember
 │   └── Repositories/
-│       └── PokemonRepository.swift    # Protocol — the only API Presentation sees
+│       ├── PokemonRepository.swift    # Protocol — Pokédex data
+│       ├── FavoritesRepository.swift  # Protocol — favorites CRUD
+│       └── TeamRepository.swift       # Protocol — team builder CRUD
 │
 ├── Data/
 │   ├── DTOs/
@@ -140,28 +174,34 @@ PokeDexBattle/
 │   │   ├── PokeAPIClient.swift        # URLSession wrapper (generic fetch<T>)
 │   │   └── NetworkLogger.swift        # Console request / response logger
 │   ├── Cache/
-│   │   ├── AppContainer.swift         # Singleton ModelContainer
+│   │   ├── AppContainer.swift         # Singleton ModelContainer (8 models)
 │   │   ├── CachedPokemon.swift        # SwiftData — list entry
-│   │   ├── CachedPokemonDetail.swift  # SwiftData — full detail (en + es descriptions)
-│   │   ├── CachedPokemonMove.swift    # SwiftData — level-up move (en + es effects)
+│   │   ├── CachedPokemonDetail.swift  # SwiftData — full detail + genderRate
+│   │   ├── CachedPokemonMove.swift    # SwiftData — level-up move
 │   │   ├── CachedEvolutionNode.swift  # SwiftData — flattened evolution tree node
-│   │   └── CachedPokemonForm.swift    # SwiftData — alternate form / variant
+│   │   ├── CachedPokemonForm.swift    # SwiftData — alternate form / variant
+│   │   ├── CachedFavoritePokemon.swift # SwiftData — favorited pokemonID + timestamp
+│   │   ├── CachedTeam.swift           # SwiftData — team (name + members relationship)
+│   │   └── CachedTeamMember.swift     # SwiftData — member snapshot
 │   └── Repositories/
-│       └── PokemonRepositoryImpl.swift  # Cache-first; maps DTOs → Domain entities
+│       ├── PokemonRepositoryImpl.swift  # Cache-first; maps DTOs → Domain entities
+│       ├── FavoritesRepositoryImpl.swift # SwiftData CRUD for favorites
+│       └── TeamRepositoryImpl.swift     # SwiftData CRUD for teams
 │
 ├── Presentation/
-│   ├── PokemonList/                   # Pokédex list, search, type filter, gen groups
-│   ├── PokemonDetail/                 # Artwork, types, description, stats, matchup tabs
+│   ├── PokemonList/                   # Pokédex list, search, type filter, gen groups, favorites
+│   ├── PokemonDetail/                 # Artwork, cry, tabs (About / Stats / Matchup), heart toolbar
 │   ├── PokemonMoves/                  # Level-up moves with localized effect descriptions
 │   ├── PokemonEvolutions/             # Branching evolution chain; tap to navigate
 │   ├── PokemonForms/                  # Alternate forms / regional variants; tap to navigate
 │   ├── TypeMatchup/                   # Defensive type effectiveness chart
+│   ├── TeamBuilder/                   # Team list, team detail, add-to-team sheet
 │   └── Shared/
 │       └── LocalizationHelper.swift   # localizedTypeName / localizedStatName /
 │                                      # localizedDamageClass / localizedGenerationLabel
 │
 ├── Localizable.xcstrings              # String catalog — en + es (Xcode 15+ format)
-├── ContentView.swift                  # Entry point → PokemonListView
+├── ContentView.swift                  # Entry point → TabView (Pokédex + Teams)
 └── PokeDexBattleApp.swift             # @main — attaches ModelContainer
 ```
 
@@ -174,13 +214,32 @@ PokeDexBattle/
 | `GET /pokemon?limit=1` | Read total Pokémon count |
 | `GET /pokemon?limit={count}&offset=0` | Fetch all Pokémon names + IDs |
 | `GET /pokemon/{id}` | Fetch detail (types, stats, sprites, move list) |
-| `GET /pokemon-species/{id}` | Fetch flavor-text description (en + es) and variety list |
+| `GET /pokemon-species/{id}` | Fetch flavor-text (en + es), variety list, and `gender_rate` |
 | `GET /move/{id}` | Fetch move detail (power, accuracy, PP, effect in en + es) |
 | `GET /evolution-chain/{id}` | Fetch full evolution chain tree |
 
 Sprites and official artwork are loaded from the GitHub-hosted CDN:
 - Sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{id}.png`
 - Artwork: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/{id}.png`
+
+---
+
+## SwiftData cache
+
+Eight `@Model` types are registered in a single `ModelContainer` (via `AppContainer.shared`):
+
+| Model | Cached data | Cleared by pull-to-refresh |
+|---|---|---|
+| `CachedPokemon` | ID, name, sprite URL, types | ✅ |
+| `CachedPokemonDetail` | Full detail, en + es Pokédex description, genderRate | ✅ |
+| `CachedPokemonMove` | Move stats, en + es short-effect description | ✅ |
+| `CachedEvolutionNode` | Flattened evolution tree node | ✅ |
+| `CachedPokemonForm` | Alternate form metadata | ✅ |
+| `CachedFavoritePokemon` | Favorited pokemonID + timestamp | ❌ user data |
+| `CachedTeam` | Team name, creation date, members (cascade) | ❌ user data |
+| `CachedTeamMember` | Pokémon snapshot (ID, name, sprite, types) | ❌ user data |
+
+The 5 Pokédex models are wiped by pull-to-refresh (`PokemonListViewModel.refreshAll()`), triggering a full re-fetch from the network. **Favorites and teams are never cleared** — they are user data.
 
 ---
 
@@ -195,6 +254,7 @@ The app is fully localized in **English** and **Spanish**.
 | Pokédex descriptions | Fetched in both `en` and `es` from `/pokemon-species/{id}`, cached separately in SwiftData, served by `Locale.current` at read time |
 | Move effect descriptions | Fetched in both `en` and `es` from `/move/{id}`, cached separately in SwiftData, served by `Locale.current` at read time |
 | Evolution trigger strings | Constructed in-app via `String(localized: "evo.*")` keys in `Localizable.xcstrings` |
+| Favorites / Team Builder strings | `String(localized: "fav.*")` and `String(localized: "team.*")` keys in `Localizable.xcstrings` |
 
 ### Adding a new language
 
@@ -206,22 +266,6 @@ The app is fully localized in **English** and **Spanish**.
 
 ---
 
-## SwiftData cache
-
-Five `@Model` types are registered in a single `ModelContainer` (via `AppContainer.shared`):
-
-| Model | Cached data |
-|---|---|
-| `CachedPokemon` | ID, name, sprite URL, types |
-| `CachedPokemonDetail` | Full detail + English and Spanish Pokédex description |
-| `CachedPokemonMove` | Move stats + English and Spanish short-effect description |
-| `CachedEvolutionNode` | Flattened evolution tree node (reconstructed into a tree at read time) |
-| `CachedPokemonForm` | Alternate form metadata |
-
-All 5 caches are wiped by pull-to-refresh (`PokemonListViewModel.refreshAll()`), triggering a full re-fetch from the network.
-
----
-
 ## Contributing
 
 1. Follow the existing Clean Architecture layering — no shortcuts across layers.
@@ -229,7 +273,8 @@ All 5 caches are wiped by pull-to-refresh (`PokemonListViewModel.refreshAll()`),
 3. Domain entities must stay free of framework imports (Foundation only).
 4. All user-visible strings must use `String(localized:)` and have entries in `Localizable.xcstrings` for both `en` and `es`.
 5. Any new PokeAPI text content (multi-language arrays) must cache both `en` and `es` raw strings in SwiftData and use `localizedText(en:es:)` at read time.
-6. Run a clean build before submitting: `xcodebuild clean build`.
+6. Place `.task` on the inner content view, **not** on `NavigationStack`, so it re-fires on pop-back.
+7. Run a clean build before submitting: `xcodebuild clean build`.
 
 ---
 
