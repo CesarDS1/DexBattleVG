@@ -31,12 +31,41 @@ struct PokemonListView: View {
             )
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
+                    favoritesFilterButton
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
                     themeMenuButton
                 }
             }
+            // IMPORTANT: .task must be inside the NavigationStack (on the VStack), NOT on
+            // the NavigationStack itself. The NavigationStack never disappears during push/pop,
+            // so a .task on it would only fire once at app launch and never again on pop-back.
+            // On the VStack, it fires every time the list becomes the top of the stack again,
+            // letting loadAll() → loadFavorites() pick up changes made in the detail screen.
+            .task {
+                await viewModel.loadAll()
+            }
         }
-        .task {
-            await viewModel.loadAll()
+    }
+
+    // MARK: - Favorites filter button
+
+    /// Toolbar button that toggles the "show favorites only" filter.
+    /// Filled red heart when active; outline heart when inactive.
+    private var favoritesFilterButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                viewModel.toggleFavoritesFilter()
+            }
+        } label: {
+            Image(systemName: viewModel.showFavoritesOnly ? "heart.fill" : "heart")
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(viewModel.showFavoritesOnly ? .red : .primary)
+                .accessibilityLabel(
+                    viewModel.showFavoritesOnly
+                        ? String(localized: "fav.filter.off", defaultValue: "Show all Pokémon")
+                        : String(localized: "fav.filter.on",  defaultValue: "Show favorites only")
+                )
         }
     }
 
@@ -120,9 +149,23 @@ struct PokemonListView: View {
             loadingView
         } else if let error = viewModel.errorMessage {
             errorView(message: error)
+        } else if viewModel.showFavoritesOnly && viewModel.favoriteIDs.isEmpty {
+            favoritesEmptyState
         } else {
             pokemonList
         }
+    }
+
+    /// Shown when the favorites filter is active but no Pokémon have been favorited yet.
+    private var favoritesEmptyState: some View {
+        ContentUnavailableView(
+            String(localized: "fav.empty.title", defaultValue: "No Favorites Yet"),
+            systemImage: "heart",
+            description: Text(
+                String(localized: "fav.empty.subtitle",
+                       defaultValue: "Swipe left on any Pokémon to add it to your favorites.")
+            )
+        )
     }
 
     private var loadingView: some View {
@@ -141,7 +184,24 @@ struct PokemonListView: View {
                     if !viewModel.collapsedGenerations.contains(group.id) {
                         ForEach(group.pokemon) { pokemon in
                             NavigationLink(destination: PokemonDetailView(pokemon: pokemon)) {
-                                PokemonRowView(pokemon: pokemon)
+                                PokemonRowView(
+                                    pokemon: pokemon,
+                                    isFavorite: viewModel.isFavorite(pokemon.id)
+                                )
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                let alreadyFav = viewModel.isFavorite(pokemon.id)
+                                Button {
+                                    Task { await viewModel.toggleFavorite(pokemonID: pokemon.id) }
+                                } label: {
+                                    Label(
+                                        alreadyFav
+                                            ? String(localized: "fav.remove", defaultValue: "Unfavorite")
+                                            : String(localized: "fav.add",    defaultValue: "Favorite"),
+                                        systemImage: alreadyFav ? "heart.slash.fill" : "heart.fill"
+                                    )
+                                }
+                                .tint(alreadyFav ? .gray : .red)
                             }
                         }
                     }

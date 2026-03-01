@@ -49,6 +49,11 @@ struct PokemonDetail: Identifiable, Equatable {
     /// URL for the Pokémon's latest cry audio (.ogg).
     /// Built from `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/{id}.ogg`
     let cryURL: URL?
+    /// Gender ratio from the species endpoint.
+    /// `-1` = genderless (e.g. Magnemite, Staryu).
+    /// `0`–`8` = eighths female: `0` → 0% ♀ / 100% ♂, `4` → 50/50, `8` → 100% ♀.
+    /// `-2` = sentinel value for legacy cache rows that predate this field (should never reach the UI).
+    let genderRate: Int
 
     /// A single base stat (e.g. HP = 45, Attack = 49).
     struct Stat: Equatable {

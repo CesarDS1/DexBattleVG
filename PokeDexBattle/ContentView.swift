@@ -9,7 +9,16 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        PokemonListView()
+        TabView {
+            Tab(String(localized: "tab.pokedex", defaultValue: "Pokédex"),
+                systemImage: "list.star") {
+                PokemonListView()
+            }
+            Tab(String(localized: "tab.teams", defaultValue: "Teams"),
+                systemImage: "person.3") {
+                TeamListView()
+            }
+        }
     }
 }
 

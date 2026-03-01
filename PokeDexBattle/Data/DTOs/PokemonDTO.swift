@@ -245,11 +245,15 @@ struct PokemonSpeciesDTO: Decodable {
     let varieties: [VarietyDTO]
     /// Localised Pokédex flavor-text entries (one per game version per language).
     let flavorTextEntries: [FlavorTextEntryDTO]
+    /// Gender ratio: `-1` = genderless; `0`–`8` = eighths female (1 unit = 12.5%).
+    /// Examples: `1` → 12.5% ♀ / 87.5% ♂; `4` → 50% / 50%; `8` → 100% ♀.
+    let genderRate: Int
 
     enum CodingKeys: String, CodingKey {
         case evolutionChain    = "evolution_chain"
         case varieties
         case flavorTextEntries = "flavor_text_entries"
+        case genderRate        = "gender_rate"
     }
 
     /// One flavor-text entry for a specific game version and language.

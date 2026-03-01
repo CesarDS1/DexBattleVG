@@ -57,19 +57,21 @@ final class PokemonListViewModel {
 
     // MARK: - Computed
 
-    /// Returns `pokemon` filtered by `searchQuery` and/or `selectedTypes`.
+    /// Returns `pokemon` filtered by `showFavoritesOnly`, `searchQuery`, and/or `selectedTypes`.
     ///
+    /// - Favourites filter: applied first when `showFavoritesOnly` is `true`.
     /// - Name filter: case- and diacritic-insensitive substring match.
     /// - Type filter: a Pokémon passes if it has **at least one** of the selected types (union).
-    /// Both filters are applied together when both are active.
     var filteredPokemon: [Pokemon] {
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         var result = pokemon
+        if showFavoritesOnly {
+            result = result.filter { favoriteIDs.contains($0.id) }
+        }
         if !trimmed.isEmpty {
             result = result.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
         }
         if !selectedTypes.isEmpty {
-            // Keep a Pokémon if its types and selectedTypes share at least one element
             result = result.filter { !Set($0.types).isDisjoint(with: selectedTypes) }
         }
         return result
@@ -81,9 +83,9 @@ final class PokemonListViewModel {
     /// `true` when at least one type filter chip is selected.
     var isFiltering: Bool { !selectedTypes.isEmpty }
 
-    /// `true` when either search or type filtering is active.
-    /// Used to decide whether to show the "no results" empty-state message.
-    var isSearchingOrFiltering: Bool { isSearching || isFiltering }
+    /// `true` when any filter (search, type, or favourites-only) is active.
+    /// Used to decide whether to show the "no results" empty-state message inside the list.
+    var isSearchingOrFiltering: Bool { isSearching || isFiltering || showFavoritesOnly }
 
     // MARK: - Generation grouping
 
@@ -132,21 +134,41 @@ final class PokemonListViewModel {
         localizedGenerationLabel(gen)
     }
 
+    // MARK: - Favourites state
+
+    /// IDs of all Pokémon currently marked as favourites. Refreshed on every list appearance.
+    private(set) var favoriteIDs: Set<Int> = []
+
+    /// When `true` the list shows only Pokémon whose IDs are in `favoriteIDs`.
+    private(set) var showFavoritesOnly = false
+
+    /// Returns `true` if the given Pokédex ID is currently marked as a favourite.
+    func isFavorite(_ id: Int) -> Bool { favoriteIDs.contains(id) }
+
     // MARK: - Dependencies
 
     private let repository: PokemonRepository
+    private let favoritesRepository: FavoritesRepository
 
-    /// Creates the ViewModel with an optional repository override (useful for previews/tests).
-    /// - Parameter repository: Defaults to the live `PokemonRepositoryImpl`.
-    init(repository: PokemonRepository = PokemonRepositoryImpl()) {
-        self.repository = repository
+    /// Creates the ViewModel with optional repository overrides (useful for previews/tests).
+    init(
+        repository: PokemonRepository = PokemonRepositoryImpl(),
+        favoritesRepository: FavoritesRepository = FavoritesRepositoryImpl()
+    ) {
+        self.repository          = repository
+        self.favoritesRepository = favoritesRepository
     }
 
     // MARK: - Intent
 
     /// Fetches all Pokémon from the repository (including their types).
-    /// Guards against duplicate calls: does nothing if already loading or already loaded.
+    /// Always refreshes favourites (fast SwiftData read) to stay in sync with detail screen.
+    /// Guards the expensive Pokémon fetch against duplicate calls.
     func loadAll() async {
+        // Favourites refresh is cheap — always run it so the list stays in sync
+        // after the user returns from a detail screen where they may have toggled a favourite.
+        await loadFavorites()
+
         guard !isLoading, !hasLoaded else { return }
 
         isLoading = true
@@ -154,7 +176,6 @@ final class PokemonListViewModel {
 
         do {
             pokemon = try await repository.fetchAllPokemon()
-            // Build the sorted list of unique type names for the filter chip bar
             availableTypes = Array(Set(pokemon.flatMap(\.types))).sorted()
         } catch {
             errorMessage = "Failed to load Pokémon: \(error.localizedDescription)"
@@ -162,6 +183,29 @@ final class PokemonListViewModel {
 
         isLoading = false
         hasLoaded = true
+    }
+
+    /// Refreshes the in-memory `favoriteIDs` from SwiftData.
+    /// Called automatically by `loadAll()` and by `toggleFavorite(pokemonID:)`.
+    func loadFavorites() async {
+        favoriteIDs = await favoritesRepository.fetchFavoriteIDs()
+    }
+
+    /// Adds or removes the Pokémon from favourites, updating `favoriteIDs` immediately
+    /// for instant UI feedback without requiring a full list reload.
+    func toggleFavorite(pokemonID: Int) async {
+        if favoriteIDs.contains(pokemonID) {
+            await favoritesRepository.removeFavorite(pokemonID: pokemonID)
+            favoriteIDs.remove(pokemonID)
+        } else {
+            await favoritesRepository.addFavorite(pokemonID: pokemonID)
+            favoriteIDs.insert(pokemonID)
+        }
+    }
+
+    /// Toggles the "show favourites only" filter on/off.
+    func toggleFavoritesFilter() {
+        showFavoritesOnly.toggle()
     }
 
     /// Resets state and re-triggers `loadAll()`.
@@ -174,8 +218,10 @@ final class PokemonListViewModel {
         await loadAll()
     }
 
-    /// Clears the local SwiftData cache and re-fetches everything from the network.
+    /// Clears the local SwiftData Pokédex cache and re-fetches everything from the network.
     /// Called when the user pulls to refresh on the Pokédex list.
+    ///
+    /// Note: Favourites are **not** cleared — they are user data independent of the API cache.
     func refreshAll() async {
         await repository.clearAllCache()
         hasLoaded = false
@@ -184,6 +230,7 @@ final class PokemonListViewModel {
         selectedTypes = []
         availableTypes = []
         collapsedGenerations = []
+        showFavoritesOnly = false
         await loadAll()
     }
 

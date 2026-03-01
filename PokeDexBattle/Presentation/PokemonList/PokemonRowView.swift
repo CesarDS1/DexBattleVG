@@ -16,6 +16,8 @@ import SwiftUI
 struct PokemonRowView: View {
     /// The lightweight Pokémon to display. Passed in from `PokemonListView`.
     let pokemon: Pokemon
+    /// Whether this Pokémon is in the user's favorites. Drives the trailing heart icon.
+    var isFavorite: Bool = false
 
     var body: some View {
         HStack(spacing: 16) {
@@ -54,7 +56,20 @@ struct PokemonRowView: View {
             }
 
             Spacer()
+
+            // Heart icon — only shown when the Pokémon is a favorite.
+            // `.transition` + `.animation` produce a scale-and-opacity pop-in/pop-out.
+            if isFavorite {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.red)
+                    .font(.subheadline)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel(
+                        String(localized: "fav.row.a11y", defaultValue: "Favorite")
+                    )
+            }
         }
         .padding(.vertical, 4)
+        .animation(.easeInOut(duration: 0.2), value: isFavorite)
     }
 }

@@ -25,6 +25,9 @@ enum AppContainer {
             CachedPokemonMove.self,
             CachedEvolutionNode.self,
             CachedPokemonForm.self,
+            CachedTeam.self,
+            CachedTeamMember.self,
+            CachedFavoritePokemon.self,
         ])
         do {
             return try ModelContainer(for: schema)

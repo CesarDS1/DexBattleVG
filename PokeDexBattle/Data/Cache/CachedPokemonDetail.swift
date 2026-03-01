@@ -34,6 +34,11 @@ final class CachedPokemonDetail {
     var descriptionTextEs: String
     /// Absolute URL string for the Pokémon's latest cry audio (.ogg).
     var cryURLString: String?
+    /// Gender ratio from the species endpoint.
+    /// `-1` = genderless; `0`–`8` = eighths female.
+    /// Default `-2` is a sentinel for rows cached before this field was added —
+    /// the repository treats `-2` as a cache miss and re-fetches from the network.
+    var genderRate: Int = -2
 
     // MARK: - Codable shim for [Stat]
 
@@ -54,7 +59,8 @@ final class CachedPokemonDetail {
         officialArtworkURLString: String?,
         descriptionText: String,
         descriptionTextEs: String,
-        cryURLString: String?
+        cryURLString: String?,
+        genderRate: Int
     ) {
         self.id = id
         self.name = name
@@ -67,6 +73,7 @@ final class CachedPokemonDetail {
         self.descriptionText = descriptionText
         self.descriptionTextEs = descriptionTextEs
         self.cryURLString = cryURLString
+        self.genderRate = genderRate
     }
 
     /// Decodes the JSON-stored stats back into `StatShim` values.

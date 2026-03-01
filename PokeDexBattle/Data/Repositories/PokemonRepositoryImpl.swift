@@ -87,7 +87,10 @@ final class PokemonRepositoryImpl: PokemonRepository {
             predicate: #Predicate { $0.id == id }
         )
         descriptor.fetchLimit = 1
-        if let cached = try? readCtx.fetch(descriptor).first {
+        // Skip cache if genderRate == -2: that row was written before this field was added.
+        // SwiftData's @Attribute(.unique) + insert acts as REPLACE, so the re-fetch below
+        // will overwrite the stale row and the next launch will be served from cache.
+        if let cached = try? readCtx.fetch(descriptor).first, cached.genderRate != -2 {
             let stats = cached.decodedStats.map {
                 PokemonDetail.Stat(name: $0.name, value: $0.value)
             }
@@ -106,7 +109,8 @@ final class PokemonRepositoryImpl: PokemonRepository {
                     es: cached.descriptionTextEs
                 ),
                 cryURL: cached.cryURLString.flatMap(URL.init)
-                    ?? Self.cryURL(for: cached.name)
+                    ?? Self.cryURL(for: cached.name),
+                genderRate: cached.genderRate
             )
         }
 
@@ -137,10 +141,13 @@ final class PokemonRepositoryImpl: PokemonRepository {
             spriteURL: dto.sprites.frontDefault.flatMap(URL.init),
             officialArtworkURL: Self.officialArtworkURL(for: dto.id),
             description: Self.localizedText(en: descriptionEn, es: descriptionEs),
-            cryURL: cryURL
+            cryURL: cryURL,
+            genderRate: species.genderRate
         )
 
-        // 3. Write to cache — store both language strings
+        // 3. Write to cache — store both language strings.
+        // @Attribute(.unique) on `id` means SwiftData REPLACES any existing row with the same id,
+        // so this insert also serves as an upsert for stale rows (genderRate == -2).
         let writeCtx = ModelContext(AppContainer.shared)
         let shims = detail.stats.map {
             CachedPokemonDetail.StatShim(name: $0.name, value: $0.value)
@@ -156,7 +163,8 @@ final class PokemonRepositoryImpl: PokemonRepository {
             officialArtworkURLString: detail.officialArtworkURL?.absoluteString,
             descriptionText: descriptionEn,
             descriptionTextEs: descriptionEs,
-            cryURLString: cryURL?.absoluteString
+            cryURLString: cryURL?.absoluteString,
+            genderRate: detail.genderRate
         ))
         try? writeCtx.save()
 
