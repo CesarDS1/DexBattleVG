@@ -13,6 +13,7 @@ import SwiftUI
 struct PokemonListView: View {
     @State private var viewModel = PokemonListViewModel()
     @Environment(\.appTheme) private var appTheme
+    @State private var showingAbout = false
 
     var body: some View {
         NavigationStack {
@@ -36,6 +37,12 @@ struct PokemonListView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     themeMenuButton
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    aboutButton
+                }
+            }
+            .sheet(isPresented: $showingAbout) {
+                AboutView()
             }
             // IMPORTANT: .task must be inside the NavigationStack (on the VStack), NOT on
             // the NavigationStack itself. The NavigationStack never disappears during push/pop,
@@ -45,6 +52,17 @@ struct PokemonListView: View {
             .task {
                 await viewModel.loadAll()
             }
+        }
+    }
+
+    // MARK: - About button
+
+    private var aboutButton: some View {
+        Button {
+            showingAbout = true
+        } label: {
+            Image(systemName: "info.circle")
+                .accessibilityLabel(String(localized: "about.title", defaultValue: "About"))
         }
     }
 
